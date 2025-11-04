@@ -157,7 +157,18 @@ export const getAllRequirements = async () => {
     return response.data
 }
 
-export const getRequirementDocuments = async (requirementId) => {
+export const getRequirementDocuments = async (requirementId, companyId = null) => {
     const response = await api.get(`/api/v1/requirements/${requirementId}/documents`)
-    return response.data
+    let documents = response.data || []
+
+    // Filter by companyId if provided
+    if (companyId) {
+        const companyIdNum = typeof companyId === 'string' ? parseInt(companyId, 10) : companyId
+        documents = documents.filter(doc => {
+            // Check if document has company and company.id matches
+            return doc.company && doc.company.id === companyIdNum
+        })
+    }
+
+    return documents
 }

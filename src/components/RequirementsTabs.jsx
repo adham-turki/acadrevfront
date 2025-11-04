@@ -29,8 +29,6 @@ export default function RequirementsTabs({
   getRequirementDocuments,
   refreshRequirementId = null // When this changes, refresh that requirement's documents
 }) {
-  // companyId is passed from parent but not currently used in this component
-  void companyId
   const [activeSection, setActiveSection] = useState(null)
   const [expandedSections, setExpandedSections] = useState(new Set())
   const [documentsCache, setDocumentsCache] = useState({})
@@ -75,7 +73,7 @@ export default function RequirementsTabs({
       const reloadDocuments = async () => {
         setLoadingDocs(prev => ({ ...prev, [refreshRequirementId]: true }))
         try {
-          const docs = await getRequirementDocuments(refreshRequirementId)
+          const docs = await getRequirementDocuments(refreshRequirementId, companyId)
           setDocumentsCache(prev => ({ ...prev, [refreshRequirementId]: docs || [] }))
           setDocumentCounts(prev => ({ ...prev, [refreshRequirementId]: docs?.length || 0 }))
 
@@ -109,7 +107,7 @@ export default function RequirementsTabs({
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshRequirementId, getRequirementDocuments])
+  }, [refreshRequirementId, getRequirementDocuments, companyId])
 
   // Load document counts for all requirements (only once)
   useEffect(() => {
@@ -120,7 +118,7 @@ export default function RequirementsTabs({
             .filter(req => prev[req.id] === undefined)
             .map(async (requirement) => {
               try {
-                const docs = await getRequirementDocuments(requirement.id)
+                const docs = await getRequirementDocuments(requirement.id, companyId)
                 return { id: requirement.id, count: docs?.length || 0 }
               } catch (error) {
                 console.error(`Error loading document count for requirement ${requirement.id}:`, error)
@@ -142,7 +140,7 @@ export default function RequirementsTabs({
 
       loadCounts()
     }
-  }, [requirements, getRequirementDocuments])
+  }, [requirements, getRequirementDocuments, companyId])
 
   // Organize sections into hierarchy based on code
   useEffect(() => {
@@ -282,7 +280,7 @@ export default function RequirementsTabs({
 
     setLoadingDocs(prev => ({ ...prev, [requirementId]: true }))
     try {
-      const docs = await getRequirementDocuments(requirementId)
+      const docs = await getRequirementDocuments(requirementId, companyId)
       setDocumentsCache(prev => ({ ...prev, [requirementId]: docs || [] }))
       setDocumentCounts(prev => ({ ...prev, [requirementId]: docs?.length || 0 }))
 

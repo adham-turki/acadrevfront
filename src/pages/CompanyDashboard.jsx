@@ -21,7 +21,8 @@ import {
   FileSpreadsheet,
   FileType,
 } from "lucide-react"
-import { getMyDocuments, uploadFile, downloadFile, createCompanyProfile, getCompanyReviews, getCurrentUserCompany, getDocumentReviews } from "../lib/company-api"
+import { getMyDocuments, uploadFile, downloadFile, createCompanyProfile, getCompanyReviews, getCurrentUserCompany, getDocumentReviews, getAllSections, getAllRequirements, getRequirementDocuments } from "../lib/company-api"
+import RequirementsTabs from "../components/RequirementsTabs"
 
 export default function CompanyDashboard() {
   const navigate = useNavigate()
@@ -54,6 +55,12 @@ export default function CompanyDashboard() {
   const [selectedDocumentForReviews, setSelectedDocumentForReviews] = useState(null)
   const [documentReviews, setDocumentReviews] = useState([])
   const [toast, setToast] = useState(null)
+  const [selectedISO, setSelectedISO] = useState("ISO 9001")
+  const [sections, setSections] = useState([])
+  const [requirements, setRequirements] = useState([])
+  const [selectedRequirement, setSelectedRequirement] = useState(null)
+  const [selectedSection, setSelectedSection] = useState(null)
+  const [refreshRequirementId, setRefreshRequirementId] = useState(null)
 
   useEffect(() => {
     const checkCompanyAndLoad = async () => {
@@ -111,14 +118,30 @@ export default function CompanyDashboard() {
 
   const fetchCompanyData = async (companyId) => {
     try {
-      // Fetch documents and reviews in parallel
-      const [docsData, reviewsData] = await Promise.all([
+      // Fetch documents, reviews, sections, and requirements in parallel
+      const [docsData, reviewsData, sectionsData, requirementsData] = await Promise.all([
         getMyDocuments(companyId),
-        getCompanyReviews(companyId).catch(() => []) // If no reviews, return empty array
+        getCompanyReviews(companyId).catch((err) => {
+          console.warn("Failed to load reviews:", err)
+          return []
+        }),
+        getAllSections().catch((err) => {
+          console.error("Failed to load sections:", err)
+          return []
+        }),
+        getAllRequirements().catch((err) => {
+          console.error("Failed to load requirements:", err)
+          return []
+        })
       ])
+
+      console.log("Fetched sections:", sectionsData)
+      console.log("Fetched requirements:", requirementsData)
 
       setDocuments(docsData)
       setReviews(reviewsData)
+      setSections(sectionsData)
+      setRequirements(requirementsData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -146,17 +169,69 @@ export default function CompanyDashboard() {
     setError("")
 
     try {
-      await uploadFile(uploadForm.file, companyId, uploadForm.documentType)
+      // Only send sectionId if it's a real (numeric) section ID, not a virtual one
+      let sectionId = null
+      if (selectedSection?.id) {
+        const sectionIdStr = selectedSection.id.toString()
+        // Check if it's a virtual section (starts with "virtual-")
+        if (!sectionIdStr.startsWith("virtual-")) {
+          // Try to parse as integer
+          const sectionIdNum = typeof selectedSection.id === 'number'
+            ? selectedSection.id
+            : parseInt(sectionIdStr, 10)
+
+          if (!isNaN(sectionIdNum) && sectionIdNum > 0) {
+            sectionId = sectionIdNum
+          }
+        }
+        // If it's a virtual section, sectionId remains null
+      }
+
+      const requirementId = selectedRequirement?.id || null
+
+      console.log("Uploading with:", {
+        companyId,
+        documentType: uploadForm.documentType,
+        sectionId,
+        requirementId,
+        selectedSection: selectedSection
+      })
+
+      await uploadFile(
+        uploadForm.file,
+        companyId,
+        uploadForm.documentType,
+        sectionId,
+        requirementId
+      )
 
       showToast("Document uploaded successfully!")
       setUploadModalOpen(false)
       setUploadForm({ title: "", description: "", file: null, documentType: "GENERAL" })
+
+      // Trigger refresh of the requirement in RequirementsTabs
+      if (requirementId) {
+        setRefreshRequirementId(requirementId)
+        // Reset after a short delay to allow re-triggering if needed
+        setTimeout(() => setRefreshRequirementId(null), 100)
+      }
+
+      setSelectedRequirement(null)
+      setSelectedSection(null)
       fetchCompanyData(companyId)
     } catch (err) {
+      console.error("Upload error:", err)
       setError(err.message)
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleUploadClick = (requirement = null, section = null) => {
+    setSelectedRequirement(requirement)
+    setSelectedSection(section)
+    setUploadModalOpen(true)
+    console.log("Upload clicked for requirement:", requirement, "section:", section)
   }
 
   const handleDownload = async (documentId, filename) => {
@@ -238,6 +313,29 @@ export default function CompanyDashboard() {
           </div>
         </div>
       </header>
+
+      {/* ISO Selector - Only show when profile exists */}
+      {profile && !showCreateProfile && (
+        <div className="bg-white border-b border-gray-200 animate-fade-in">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-700">ISO Standard:</label>
+              <select
+                value={selectedISO}
+                onChange={(e) => setSelectedISO(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+              >
+                <option value="ISO 9001">ISO 9001 - Quality Management</option>
+                <option value="ISO 14001">ISO 14001 - Environmental Management</option>
+                <option value="ISO 45001">ISO 45001 - Occupational Health & Safety</option>
+              </select>
+              {selectedISO !== "ISO 9001" && (
+                <span className="text-sm text-orange-600 font-medium">Coming Soon</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {error && (
@@ -367,102 +465,50 @@ export default function CompanyDashboard() {
           </div>
         )}
 
-        {/* Documents Section */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 animate-slide-in">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Documents</h2>
-              <p className="text-gray-600">Manage your uploaded documents</p>
+        {/* Requirements & Documents Section */}
+        {selectedISO === "ISO 9001" ? (
+          <div className="animate-slide-in">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Requirements & Documents</h2>
+                <p className="text-gray-600">Manage documents by ISO 9001 requirements</p>
+              </div>
+              <button
+                onClick={() => handleUploadClick()}
+                className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              >
+                <Upload className="w-5 h-5" />
+                Quick Upload
+              </button>
             </div>
-            <button
-              onClick={() => setUploadModalOpen(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              <Upload className="w-5 h-5" />
-              Upload Document
-            </button>
+
+            <RequirementsTabs
+              sections={sections || []}
+              requirements={requirements || []}
+              companyId={companyId}
+              isAuditor={false}
+              onUpload={handleUploadClick}
+              onDownload={handleDownload}
+              getRequirementDocuments={getRequirementDocuments}
+              refreshRequirementId={refreshRequirementId}
+            />
           </div>
-
-          {documents.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg mb-2">No documents uploaded yet</p>
-              <p className="text-gray-400">Click the upload button to add your first document</p>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center animate-slide-in">
+            <div className="max-w-md mx-auto">
+              <div className="bg-gradient-to-br from-orange-100 to-yellow-100 p-4 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+                <AlertCircle className="w-10 h-10 text-orange-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Coming Soon</h3>
+              <p className="text-gray-600 mb-2">
+                Support for <strong>{selectedISO}</strong> is currently under development.
+              </p>
+              <p className="text-gray-500 text-sm">
+                Please select ISO 9001 to manage your quality management system documentation.
+              </p>
             </div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {documents.map((doc, index) => (
-                <div
-                  key={doc.id}
-                  className="border border-gray-200 rounded-xl p-4 hover:shadow-lg hover:border-indigo-300 transition-all duration-300 animate-fade-in cursor-pointer"
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                  onClick={() => handleViewReviews(doc)}
-                >
-                  <div className="flex items-start gap-3 mb-3">
-                    {(() => {
-                      const { Icon, color, bgColor } = getFileIcon(doc.fileType)
-                      return (
-                        <div className={`${bgColor} p-3 rounded-lg`}>
-                          <Icon className={`w-6 h-6 ${color}`} />
-                        </div>
-                      )
-                    })()}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{doc.fileName}</h3>
-                      <p className="text-xs text-gray-500">{new Date(doc.uploadedAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-
-                  {/* Reviews Count Badge */}
-                  {getReviewsForDocument(doc.id).length > 0 && (
-                    <div className="mb-3 p-2 bg-yellow-50 rounded-lg flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Star className="w-4 h-4 text-yellow-600 fill-yellow-600" />
-                        <span className="text-xs font-semibold text-yellow-800">
-                          {getReviewsForDocument(doc.id).length} Review{getReviewsForDocument(doc.id).length > 1 ? 's' : ''}
-                        </span>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleViewReviews(doc)
-                        }}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                      >
-                        View All →
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDownload(doc.id, doc.fileName)
-                      }}
-                      className="flex-1 flex items-center justify-center gap-2 bg-gray-100 hover:bg-indigo-100 text-gray-700 hover:text-indigo-700 px-4 py-2 rounded-lg transition-all duration-300"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
-                    {getReviewsForDocument(doc.id).length > 0 && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleViewReviews(doc)
-                        }}
-                        className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-all duration-300"
-                      >
-                        <Star className="w-4 h-4" />
-                        Reviews
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </main>
 
       {/* Upload Modal */}
@@ -480,29 +526,19 @@ export default function CompanyDashboard() {
             </div>
 
             <form onSubmit={handleUpload} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Document Title</label>
-                <input
-                  type="text"
-                  value={uploadForm.title}
-                  onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  placeholder="Enter document title"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  value={uploadForm.description}
-                  onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
-                  required
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
-                  placeholder="Enter document description"
-                />
-              </div>
+              {selectedRequirement && selectedSection && (
+                <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                  <p className="text-sm font-medium text-indigo-900 mb-2">Upload to:</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm bg-indigo-100 px-2 py-1 rounded">
+                      Section {selectedSection.code}
+                    </span>
+                    <span className="text-sm text-indigo-800">
+                      {selectedRequirement.name}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
@@ -517,6 +553,9 @@ export default function CompanyDashboard() {
                   <option value="LEGAL">Legal Document</option>
                   <option value="CONTRACT">Contract</option>
                   <option value="CERTIFICATE">Certificate</option>
+                  <option value="PROCEDURE">Procedure</option>
+                  <option value="POLICY">Policy</option>
+                  <option value="RECORD">Record</option>
                   <option value="OTHER">Other</option>
                 </select>
               </div>
@@ -525,10 +564,32 @@ export default function CompanyDashboard() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">File</label>
                 <input
                   type="file"
-                  onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files[0] })}
+                  accept="application/pdf,.pdf"
+                  onChange={(e) => {
+                    const file = e.target.files[0]
+                    if (file) {
+                      // Validate file type - only PDF allowed
+                      const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+                      if (!isPDF) {
+                        setError("Only PDF files are allowed. Please select a PDF file.")
+                        e.target.value = "" // Clear the input
+                        return
+                      }
+                      setUploadForm({ ...uploadForm, file })
+                      setError("") // Clear any previous errors
+                    }
+                  }}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                 />
+                <p className="text-xs text-gray-500 mt-2">
+                  Only PDF files are accepted
+                </p>
+                {uploadForm.file && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Selected: {uploadForm.file.name} ({(uploadForm.file.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
               </div>
 
               <button
@@ -577,7 +638,6 @@ export default function CompanyDashboard() {
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
                             <span className="font-semibold text-gray-900">
                               {review.auditor?.name || review.auditor?.username || "Anonymous Auditor"}
                             </span>
@@ -585,19 +645,17 @@ export default function CompanyDashboard() {
                               • {new Date(review.reviewedAt).toLocaleDateString()}
                             </span>
                           </div>
-                          <div className="flex gap-1">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <span
-                                key={i}
-                                className={`text-lg ${i < review.rating
-                                  ? "text-yellow-400 fill-yellow-400"
-                                  : "text-gray-300"
-                                  }`}
-                              >
-                                ★
-                              </span>
-                            ))}
-                            <span className="text-sm text-gray-600 ml-2">({review.rating}/5)</span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-3 py-1 rounded-full text-sm font-medium ${review.rating === "ACCEPTED"
+                                ? "bg-green-100 text-green-800"
+                                : review.rating === "REJECTED"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-orange-100 text-orange-800"
+                                }`}
+                            >
+                              {review.rating}
+                            </span>
                           </div>
                         </div>
                       </div>

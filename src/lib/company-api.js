@@ -20,11 +20,13 @@ export const getMyDocuments = async (companyId) => {
     return response.data
 }
 
-export const uploadFile = async (file, companyId, documentType) => {
+export const uploadFile = async (file, companyId, documentType, sectionId = null, requirementId = null) => {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("companyId", companyId)
     formData.append("documentType", documentType)
+    if (sectionId) formData.append("sectionId", sectionId)
+    if (requirementId) formData.append("requirementId", requirementId)
 
     const response = await api.post("/api/v1/document/upload", formData, {
         headers: {
@@ -135,5 +137,27 @@ export const getCompanyProfile = async (id) => {
 
 export const getCompanyDocuments = async (companyId) => {
     const response = await api.get(`/api/v1/company-profile/${companyId}/documents`)
+    return response.data
+}
+
+// Sections API
+export const getAllSections = async () => {
+    const response = await api.get("/api/v1/sections")
+    return response.data
+}
+
+export const getSectionRequirements = async (sectionId) => {
+    const response = await api.get(`/api/v1/sections/${sectionId}/requirements`)
+    return response.data
+}
+
+// Requirements API
+export const getAllRequirements = async () => {
+    const response = await api.get("/api/v1/requirements")
+    return response.data
+}
+
+export const getRequirementDocuments = async (requirementId) => {
+    const response = await api.get(`/api/v1/requirements/${requirementId}/documents`)
     return response.data
 }

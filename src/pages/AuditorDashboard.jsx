@@ -20,8 +20,11 @@ import {
   Image as ImageIcon,
   FileSpreadsheet,
   FileType,
+  Check,
+  XCircle,
 } from "lucide-react"
-import { getAllCompanies, getCompanyDocuments, reviewDocument, hasAlreadyReviewed, downloadFile } from "../lib/auditor-api"
+import { getAllCompanies, getCompanyDocuments, reviewDocument, hasAlreadyReviewed, downloadFile, getAllSections, getAllRequirements, getRequirementDocuments } from "../lib/auditor-api"
+import RequirementsTabs from "../components/RequirementsTabs"
 
 export default function AuditorDashboard() {
   const navigate = useNavigate()
@@ -34,9 +37,11 @@ export default function AuditorDashboard() {
   const [error, setError] = useState("")
   const [reviewedDocuments, setReviewedDocuments] = useState(new Set())
   const [toast, setToast] = useState(null)
+  const [sections, setSections] = useState([])
+  const [requirements, setRequirements] = useState([])
 
   const [reviewForm, setReviewForm] = useState({
-    rating: 5,
+    rating: "ACCEPTED",
     comments: "",
   })
 
@@ -65,14 +70,30 @@ export default function AuditorDashboard() {
 
   const fetchCompanyDocuments = async (companyId) => {
     try {
-      const data = await getCompanyDocuments(companyId)
-      setCompanyDocuments(data)
+      const [docsData, sectionsData, requirementsData] = await Promise.all([
+        getCompanyDocuments(companyId),
+        getAllSections().catch((err) => {
+          console.error("Failed to load sections:", err)
+          return []
+        }),
+        getAllRequirements().catch((err) => {
+          console.error("Failed to load requirements:", err)
+          return []
+        })
+      ])
+      
+      console.log("Fetched sections:", sectionsData)
+      console.log("Fetched requirements:", requirementsData)
+      
+      setCompanyDocuments(docsData)
+      setSections(sectionsData)
+      setRequirements(requirementsData)
 
       // Check which documents the user has already reviewed
       const userId = localStorage.getItem("userId")
       if (userId) {
         const reviewedSet = new Set()
-        for (const doc of data) {
+        for (const doc of docsData) {
           const hasReviewed = await hasAlreadyReviewed(doc.id, userId)
           if (hasReviewed) {
             reviewedSet.add(doc.id)
@@ -138,10 +159,24 @@ export default function AuditorDashboard() {
       setReviewedDocuments(prev => new Set([...prev, selectedDocument.id]))
 
       setReviewModalOpen(false)
-      setReviewForm({ rating: 5, comments: "" })
+      setReviewForm({ rating: "ACCEPTED", comments: "" })
       showToast("Review submitted successfully!")
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  const handleReviewClick = async (document, rating, comments) => {
+    try {
+      await reviewDocument(document.id, rating, comments)
+      showToast("Review submitted successfully!")
+      // Refresh company documents
+      if (selectedCompany) {
+        fetchCompanyDocuments(selectedCompany.id)
+      }
+    } catch (err) {
+      showToast("Error submitting review: " + err.message, "error")
+      throw err
     }
   }
 
@@ -336,89 +371,22 @@ export default function AuditorDashboard() {
               </div>
             </div>
 
-            {/* Documents */}
+            {/* Requirements & Documents */}
             <div className="bg-white rounded-2xl shadow-lg p-6 animate-slide-in" style={{ animationDelay: "0.1s" }}>
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Documents</h2>
-                <p className="text-gray-600">Review and audit company documents</p>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Requirements & Documents</h2>
+                <p className="text-gray-600">Review and audit company documents by ISO 9001 requirements</p>
               </div>
 
-              {companyDocuments.length === 0 ? (
-                <div className="text-center py-12">
-                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">No documents available</p>
-                </div>
-              ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {companyDocuments.map((doc, index) => (
-                    <div
-                      key={doc.id}
-                      className="border border-gray-200 rounded-xl p-4 hover:shadow-lg hover:border-purple-300 transition-all duration-300 animate-fade-in"
-                      style={{ animationDelay: `${index * 0.05}s` }}
-                    >
-                      <div className="flex items-start gap-3 mb-3">
-                        {(() => {
-                          const { Icon, color, bgColor } = getFileIcon(doc.fileType)
-                          return (
-                            <div className={`${bgColor} p-3 rounded-lg`}>
-                              <Icon className={`w-6 h-6 ${color}`} />
-                            </div>
-                          )
-                        })()}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 truncate">{doc.fileName}</h3>
-                          <p className="text-xs text-gray-500">{new Date(doc.uploadedAt).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 mb-4 text-xs text-gray-600">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Document Type:</span>
-                          <span className="text-purple-600">{doc.documentType}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">File Type:</span>
-                          <span className="text-gray-500">{doc.fileType}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Document ID:</span>
-                          <span className="text-gray-400">#{doc.id}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDownload(doc.id, doc.fileName)}
-                          className="flex-1 flex items-center justify-center gap-2 bg-gray-100 hover:bg-purple-100 text-gray-700 hover:text-purple-700 px-3 py-2 rounded-lg transition-all duration-300 text-sm"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download
-                        </button>
-                        {reviewedDocuments.has(doc.id) ? (
-                          <button
-                            disabled
-                            className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white px-3 py-2 rounded-lg text-sm cursor-not-allowed"
-                          >
-                            <Star className="w-4 h-4 fill-white" />
-                            Already Reviewed
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setSelectedDocument(doc)
-                              setReviewModalOpen(true)
-                            }}
-                            className="flex-1 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg transition-all duration-300 text-sm"
-                          >
-                            <Star className="w-4 h-4" />
-                            Review
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <RequirementsTabs
+                sections={sections || []}
+                requirements={requirements || []}
+                companyId={selectedCompany.id}
+                isAuditor={true}
+                onReview={handleReviewClick}
+                onDownload={handleDownload}
+                getRequirementDocuments={getRequirementDocuments}
+              />
             </div>
           </div>
         )}
@@ -427,7 +395,7 @@ export default function AuditorDashboard() {
       {/* Review Modal */}
       {reviewModalOpen && selectedDocument && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 animate-scale-in max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">Submit Review</h3>
               <button
@@ -441,35 +409,96 @@ export default function AuditorDashboard() {
             <div className="mb-6 p-4 bg-gray-50 rounded-lg">
               <p className="text-sm text-gray-500 mb-1">Document</p>
               <p className="font-semibold text-gray-900">{selectedDocument.fileName}</p>
-              <div className="mt-2 flex gap-4 text-xs text-gray-600">
-                <span>Type: {selectedDocument.documentType}</span>
-                <span>•</span>
-                <span>File: {selectedDocument.fileType}</span>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
+                <span className="bg-white px-2 py-1 rounded">Type: {selectedDocument.documentType}</span>
+                <span className="bg-white px-2 py-1 rounded">File: {selectedDocument.fileType}</span>
+                {selectedDocument.requirement && (
+                  <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded font-medium">
+                    Req: {selectedDocument.requirement.name}
+                  </span>
+                )}
+                {selectedDocument.section && (
+                  <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded font-mono font-medium">
+                    Section {selectedDocument.section.code}
+                  </span>
+                )}
               </div>
             </div>
 
             <form onSubmit={handleSubmitReview} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Rating</label>
-                <div className="flex gap-2 justify-center">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => setReviewForm({ ...reviewForm, rating })}
-                      className="transition-transform hover:scale-110"
-                    >
-                      <Star
-                        className={`w-10 h-10 ${rating <= reviewForm.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
-                          }`}
-                      />
-                    </button>
-                  ))}
+                <label className="block text-sm font-medium text-gray-700 mb-3">Review Status</label>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setReviewForm({ ...reviewForm, rating: "ACCEPTED" })}
+                    className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
+                      reviewForm.rating === "ACCEPTED"
+                        ? "border-green-500 bg-green-50"
+                        : "border-gray-200 hover:border-green-300"
+                    }`}
+                  >
+                    <div className={`p-3 rounded-lg ${
+                      reviewForm.rating === "ACCEPTED" ? "bg-green-500" : "bg-green-100"
+                    }`}>
+                      <Check className={`w-6 h-6 ${
+                        reviewForm.rating === "ACCEPTED" ? "text-white" : "text-green-600"
+                      }`} />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-semibold text-gray-900">ACCEPTED</p>
+                      <p className="text-sm text-gray-600">Document meets all requirements</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReviewForm({ ...reviewForm, rating: "TSE" })}
+                    className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
+                      reviewForm.rating === "TSE"
+                        ? "border-orange-500 bg-orange-50"
+                        : "border-gray-200 hover:border-orange-300"
+                    }`}
+                  >
+                    <div className={`p-3 rounded-lg ${
+                      reviewForm.rating === "TSE" ? "bg-orange-500" : "bg-orange-100"
+                    }`}>
+                      <AlertCircle className={`w-6 h-6 ${
+                        reviewForm.rating === "TSE" ? "text-white" : "text-orange-600"
+                      }`} />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-semibold text-gray-900">TSE (To See Evidence)</p>
+                      <p className="text-sm text-gray-600">Additional evidence or clarification needed</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReviewForm({ ...reviewForm, rating: "REJECTED" })}
+                    className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
+                      reviewForm.rating === "REJECTED"
+                        ? "border-red-500 bg-red-50"
+                        : "border-gray-200 hover:border-red-300"
+                    }`}
+                  >
+                    <div className={`p-3 rounded-lg ${
+                      reviewForm.rating === "REJECTED" ? "bg-red-500" : "bg-red-100"
+                    }`}>
+                      <X className={`w-6 h-6 ${
+                        reviewForm.rating === "REJECTED" ? "text-white" : "text-red-600"
+                      }`} />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="font-semibold text-gray-900">REJECTED</p>
+                      <p className="text-sm text-gray-600">Document does not meet requirements</p>
+                    </div>
+                  </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Comments</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Comments *</label>
                 <textarea
                   value={reviewForm.comments}
                   onChange={(e) => setReviewForm({ ...reviewForm, comments: e.target.value })}

@@ -476,28 +476,6 @@ export default function AuditorDashboard() {
 
                   <button
                     type="button"
-                    onClick={() => setReviewForm({ ...reviewForm, rating: "TSE" })}
-                    className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
-                      reviewForm.rating === "TSE"
-                        ? "border-orange-500 bg-orange-50"
-                        : "border-gray-200 hover:border-orange-300"
-                    }`}
-                  >
-                    <div className={`p-3 rounded-lg ${
-                      reviewForm.rating === "TSE" ? "bg-orange-500" : "bg-orange-100"
-                    }`}>
-                      <AlertCircle className={`w-6 h-6 ${
-                        reviewForm.rating === "TSE" ? "text-white" : "text-orange-600"
-                      }`} />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="font-semibold text-gray-900">TSE (To See Evidence)</p>
-                      <p className="text-sm text-gray-600">Additional evidence or clarification needed</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => setReviewForm({ ...reviewForm, rating: "REJECTED" })}
                     className={`w-full flex items-center gap-4 p-4 rounded-lg border-2 transition-all ${
                       reviewForm.rating === "REJECTED"

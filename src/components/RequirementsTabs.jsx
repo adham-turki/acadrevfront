@@ -1031,7 +1031,7 @@ export default function RequirementsTabs({
                                       <span>Audit: {getStatusLabel(getAuditStatus(requirement.id)).label}</span>
                                     </div>
                                   ) : (
-                                    // Editable dropdown for auditors (Yes/No only, no TSE)
+                                    // Editable dropdown for auditors (No/TSE/Yes)
                                     <div className="relative status-dropdown-container" style={{ zIndex: statusDropdowns[`audit-${requirement.id}`] ? 1000 : 'auto' }}>
                                       <button
                                         onClick={() => toggleAuditStatusDropdown(requirement.id)}
@@ -1056,6 +1056,14 @@ export default function RequirementsTabs({
                                           >
                                             <XCircle className={`w-4 h-4 ${getAuditStatus(requirement.id) === 0 ? "text-red-600" : "text-gray-400"}`} />
                                             No
+                                          </button>
+                                          <button
+                                            onClick={() => handleAuditStatusUpdate(requirement.id, 1)}
+                                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${getAuditStatus(requirement.id) === 1 ? "bg-orange-50 font-semibold" : ""
+                                              }`}
+                                          >
+                                            <AlertCircle className={`w-4 h-4 ${getAuditStatus(requirement.id) === 1 ? "text-orange-600" : "text-gray-400"}`} />
+                                            TSE
                                           </button>
                                           <button
                                             onClick={() => handleAuditStatusUpdate(requirement.id, 2)}
@@ -1265,7 +1273,7 @@ export default function RequirementsTabs({
                                                   <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     Review Status
                                                   </label>
-                                                  <div className="grid grid-cols-3 gap-2">
+                                                  <div className="grid grid-cols-2 gap-2">
                                                     <button
                                                       type="button"
                                                       onClick={() => setReviewForms(prev => ({
@@ -1280,21 +1288,6 @@ export default function RequirementsTabs({
                                                       <Check className={`w-5 h-5 ${formData.rating === "ACCEPTED" ? "text-green-600" : "text-gray-400"
                                                         }`} />
                                                       <span className="font-medium text-sm">ACCEPTED</span>
-                                                    </button>
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setReviewForms(prev => ({
-                                                        ...prev,
-                                                        [doc.id]: { ...formData, rating: "TSE" }
-                                                      }))}
-                                                      className={`p-3 rounded-lg border-2 transition-all flex items-center gap-2 ${formData.rating === "TSE"
-                                                        ? "border-orange-500 bg-orange-50"
-                                                        : "border-gray-200 hover:border-orange-300"
-                                                        }`}
-                                                    >
-                                                      <AlertCircle className={`w-5 h-5 ${formData.rating === "TSE" ? "text-orange-600" : "text-gray-400"
-                                                        }`} />
-                                                      <span className="font-medium text-sm">TSE</span>
                                                     </button>
                                                     <button
                                                       type="button"

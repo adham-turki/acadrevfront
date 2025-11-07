@@ -23,7 +23,7 @@ import {
   Check,
   XCircle,
 } from "lucide-react"
-import { getAllCompanies, getCompanyDocuments, reviewDocument, hasAlreadyReviewed, downloadFile, getAllSections, getAllRequirements, getRequirementDocuments } from "../lib/auditor-api"
+import { getAllCompanies, getCompanyDocuments, reviewDocument, hasAlreadyReviewed, downloadFile, getAllSections, getAllRequirements, getRequirementDocuments, getRequirementsWithAuditStatus, upsertAudit } from "../lib/auditor-api"
 import RequirementsTabs from "../components/RequirementsTabs"
 
 export default function AuditorDashboard() {
@@ -39,6 +39,7 @@ export default function AuditorDashboard() {
   const [toast, setToast] = useState(null)
   const [sections, setSections] = useState([])
   const [requirements, setRequirements] = useState([])
+  const [auditStatuses, setAuditStatuses] = useState([])
 
   const [reviewForm, setReviewForm] = useState({
     rating: "ACCEPTED",
@@ -70,7 +71,7 @@ export default function AuditorDashboard() {
 
   const fetchCompanyDocuments = async (companyId) => {
     try {
-      const [docsData, sectionsData, requirementsData] = await Promise.all([
+      const [docsData, sectionsData, requirementsData, auditStatusesData] = await Promise.all([
         getCompanyDocuments(companyId),
         getAllSections().catch((err) => {
           console.error("Failed to load sections:", err)
@@ -79,15 +80,21 @@ export default function AuditorDashboard() {
         getAllRequirements().catch((err) => {
           console.error("Failed to load requirements:", err)
           return []
+        }),
+        getRequirementsWithAuditStatus(companyId).catch((err) => {
+          console.error("Failed to load audit statuses:", err)
+          return []
         })
       ])
       
       console.log("Fetched sections:", sectionsData)
       console.log("Fetched requirements:", requirementsData)
+      console.log("Fetched audit statuses:", auditStatusesData)
       
       setCompanyDocuments(docsData)
       setSections(sectionsData)
       setRequirements(requirementsData)
+      setAuditStatuses(auditStatusesData)
 
       // Check which documents the user has already reviewed
       const userId = localStorage.getItem("userId")
@@ -176,6 +183,20 @@ export default function AuditorDashboard() {
       }
     } catch (err) {
       showToast("Error submitting review: " + err.message, "error")
+      throw err
+    }
+  }
+
+  const handleUpdateAuditStatus = async (requirementId, status) => {
+    if (!selectedCompany) return
+    try {
+      await upsertAudit(requirementId, selectedCompany.id, status)
+      // Refresh audit statuses
+      const updatedStatuses = await getRequirementsWithAuditStatus(selectedCompany.id)
+      setAuditStatuses(updatedStatuses)
+      showToast("Audit status updated successfully!")
+    } catch (err) {
+      showToast("Failed to update audit status: " + err.message, "error")
       throw err
     }
   }
@@ -386,6 +407,8 @@ export default function AuditorDashboard() {
                 onReview={handleReviewClick}
                 onDownload={handleDownload}
                 getRequirementDocuments={getRequirementDocuments}
+                auditStatuses={auditStatuses || []}
+                onUpdateAuditStatus={handleUpdateAuditStatus}
               />
             </div>
           </div>

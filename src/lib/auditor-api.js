@@ -121,3 +121,39 @@ export const getRequirementDocuments = async (requirementId, companyId = null) =
 
     return documents
 }
+
+// Requirement Response API (read-only for auditors)
+export const getRequirementResponse = async (companyId, requirementId) => {
+    try {
+        const response = await api.get(`/api/v1/requirement-responses/${companyId}/${requirementId}`)
+        return response.data
+    } catch (error) {
+        // If response not found (404), return null
+        if (error.response?.status === 404) {
+            return null
+        }
+        throw error
+    }
+}
+
+// Requirement Auditing API
+export const getRequirementsWithAuditStatus = async (companyId) => {
+    const response = await api.get(`/api/v1/requirement-auditing/company/${companyId}/requirements`)
+    return response.data || []
+}
+
+export const upsertAudit = async (requirementId, companyId, status) => {
+    const response = await api.post("/api/v1/requirement-auditing/upsert", null, {
+        params: {
+            requirementId,
+            companyId,
+            status
+        }
+    })
+    return response.data
+}
+
+export const getAuditProgress = async (companyId) => {
+    const response = await api.get(`/api/v1/requirement-auditing/progress/${companyId}`)
+    return response.data || 0
+}

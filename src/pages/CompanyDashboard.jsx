@@ -21,8 +21,10 @@ import {
   FileSpreadsheet,
   FileType,
 } from "lucide-react"
-import { getMyDocuments, uploadFile, downloadFile, createCompanyProfile, getCompanyReviews, getCurrentUserCompany, getDocumentReviews, getAllSections, getAllRequirements, getRequirementDocuments } from "../lib/company-api"
+import { getMyDocuments, uploadFile, downloadFile, createCompanyProfile, getCompanyReviews, getCurrentUserCompany, getDocumentReviews, getAllSections, getAllRequirements, getRequirementDocuments, getRequirementStatuses, updateRequirementStatus, getRequirementStatusProgress, getAuditProgress } from "../lib/company-api"
 import RequirementsTabs from "../components/RequirementsTabs"
+import PDFPreviewModal from "../components/PDFPreviewModal"
+import isoPdf from "../assets/ISO-9001-2015-1.pdf"
 
 export default function CompanyDashboard() {
   const navigate = useNavigate()
@@ -61,6 +63,10 @@ export default function CompanyDashboard() {
   const [selectedRequirement, setSelectedRequirement] = useState(null)
   const [selectedSection, setSelectedSection] = useState(null)
   const [refreshRequirementId, setRefreshRequirementId] = useState(null)
+  const [requirementStatuses, setRequirementStatuses] = useState([])
+  const [statusProgress, setStatusProgress] = useState(0)
+  const [auditProgress, setAuditProgress] = useState(0)
+  const [showISOPdfModal, setShowISOPdfModal] = useState(false)
 
   useEffect(() => {
     const checkCompanyAndLoad = async () => {
@@ -118,8 +124,8 @@ export default function CompanyDashboard() {
 
   const fetchCompanyData = async (companyId) => {
     try {
-      // Fetch documents, reviews, sections, and requirements in parallel
-      const [docsData, reviewsData, sectionsData, requirementsData] = await Promise.all([
+      // Fetch documents, reviews, sections, requirements, statuses, progress, and audit progress in parallel
+      const [docsData, reviewsData, sectionsData, requirementsData, statusesData, progressData, auditProgressData] = await Promise.all([
         getMyDocuments(companyId),
         getCompanyReviews(companyId).catch((err) => {
           console.warn("Failed to load reviews:", err)
@@ -132,16 +138,32 @@ export default function CompanyDashboard() {
         getAllRequirements().catch((err) => {
           console.error("Failed to load requirements:", err)
           return []
+        }),
+        getRequirementStatuses().catch((err) => {
+          console.error("Failed to load requirement statuses:", err)
+          return []
+        }),
+        getRequirementStatusProgress().catch((err) => {
+          console.error("Failed to load progress:", err)
+          return 0
+        }),
+        getAuditProgress(companyId).catch((err) => {
+          console.error("Failed to load audit progress:", err)
+          return 0
         })
       ])
 
       console.log("Fetched sections:", sectionsData)
       console.log("Fetched requirements:", requirementsData)
+      console.log("Fetched requirement statuses:", statusesData)
 
       setDocuments(docsData)
       setReviews(reviewsData)
       setSections(sectionsData)
       setRequirements(requirementsData)
+      setRequirementStatuses(statusesData)
+      setStatusProgress(progressData)
+      setAuditProgress(auditProgressData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -318,19 +340,46 @@ export default function CompanyDashboard() {
       {profile && !showCreateProfile && (
         <div className="bg-white border-b border-gray-200 animate-fade-in">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-gray-700">ISO Standard:</label>
-              <select
-                value={selectedISO}
-                onChange={(e) => setSelectedISO(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
-              >
-                <option value="ISO 9001">ISO 9001 - Quality Management</option>
-                <option value="ISO 14001">ISO 14001 - Environmental Management</option>
-                <option value="ISO 45001">ISO 45001 - Occupational Health & Safety</option>
-              </select>
-              {selectedISO !== "ISO 9001" && (
-                <span className="text-sm text-orange-600 font-medium">Coming Soon</span>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-700">ISO Standard:</label>
+                <select
+                  value={selectedISO}
+                  onChange={(e) => setSelectedISO(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                >
+                  <option value="ISO 9001">ISO 9001 - Quality Management</option>
+                  <option value="ISO 14001">ISO 14001 - Environmental Management</option>
+                  <option value="ISO 45001">ISO 45001 - Occupational Health & Safety</option>
+                </select>
+                {selectedISO !== "ISO 9001" && (
+                  <span className="text-sm text-orange-600 font-medium">Coming Soon</span>
+                )}
+                {selectedISO === "ISO 9001" && (
+                  <>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 rounded-lg border border-indigo-200">
+                      <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium text-indigo-700">
+                        Company Progress: {statusProgress}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium text-purple-700">
+                        Auditor Progress: {Math.round(auditProgress)}%
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+              {selectedISO === "ISO 9001" && (
+                <button
+                  onClick={() => setShowISOPdfModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
+                >
+                  <FileText className="w-4 h-4" />
+                  Show PDF
+                </button>
               )}
             </div>
           </div>
@@ -453,8 +502,8 @@ export default function CompanyDashboard() {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="w-5 h-5 text-indigo-600 mt-1" />
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <Building2 className="w-5 h-5 text-indigo-600" />
                   <div>
                     <p className="text-xs text-gray-500">Industry</p>
                     <p className="font-semibold text-gray-900">{profile.industry || "Not provided"}</p>
@@ -473,13 +522,7 @@ export default function CompanyDashboard() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Requirements & Documents</h2>
                 <p className="text-gray-600">Manage documents by ISO 9001 requirements</p>
               </div>
-              <button
-                onClick={() => handleUploadClick()}
-                className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
-              >
-                <Upload className="w-5 h-5" />
-                Quick Upload
-              </button>
+
             </div>
 
             <RequirementsTabs
@@ -491,6 +534,25 @@ export default function CompanyDashboard() {
               onDownload={handleDownload}
               getRequirementDocuments={getRequirementDocuments}
               refreshRequirementId={refreshRequirementId}
+              requirementStatuses={requirementStatuses}
+              onUpdateStatus={async (requirementId, status) => {
+                try {
+                  await updateRequirementStatus(requirementId, status)
+                  // Refresh statuses and progress
+                  const [statusesData, progressData, auditProgressData] = await Promise.all([
+                    getRequirementStatuses(),
+                    getRequirementStatusProgress(),
+                    getAuditProgress(companyId).catch(() => 0)
+                  ])
+                  setRequirementStatuses(statusesData)
+                  setStatusProgress(progressData)
+                  setAuditProgress(auditProgressData)
+                  showToast("Status updated successfully!")
+                } catch (err) {
+                  showToast("Failed to update status: " + err.message, "error")
+                  throw err
+                }
+              }}
             />
           </div>
         ) : (
@@ -695,6 +757,14 @@ export default function CompanyDashboard() {
           </div>
         </div>
       )}
+
+      {/* ISO PDF Preview Modal */}
+      <PDFPreviewModal
+        isOpen={showISOPdfModal}
+        onClose={() => setShowISOPdfModal(false)}
+        pdfUrl={isoPdf}
+        fileName="ISO 9001:2015 - Quality Management Systems"
+      />
     </div>
   )
 }

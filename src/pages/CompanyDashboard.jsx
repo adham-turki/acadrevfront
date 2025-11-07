@@ -21,7 +21,7 @@ import {
   FileSpreadsheet,
   FileType,
 } from "lucide-react"
-import { getMyDocuments, uploadFile, downloadFile, createCompanyProfile, getCompanyReviews, getCurrentUserCompany, getDocumentReviews, getAllSections, getAllRequirements, getRequirementDocuments, getRequirementStatuses, updateRequirementStatus, getRequirementStatusProgress, getAuditProgress } from "../lib/company-api"
+import { getMyDocuments, uploadFile, downloadFile, createCompanyProfile, getCompanyReviews, getCurrentUserCompany, getDocumentReviews, getAllSections, getAllRequirements, getRequirementDocuments, getRequirementStatuses, updateRequirementStatus, getRequirementStatusProgress, getAuditProgress, getRequirementsWithAuditStatus } from "../lib/company-api"
 import RequirementsTabs from "../components/RequirementsTabs"
 import PDFPreviewModal from "../components/PDFPreviewModal"
 import isoPdf from "../assets/ISO-9001-2015-1.pdf"
@@ -66,6 +66,7 @@ export default function CompanyDashboard() {
   const [requirementStatuses, setRequirementStatuses] = useState([])
   const [statusProgress, setStatusProgress] = useState(0)
   const [auditProgress, setAuditProgress] = useState(0)
+  const [auditStatuses, setAuditStatuses] = useState([])
   const [showISOPdfModal, setShowISOPdfModal] = useState(false)
 
   useEffect(() => {
@@ -124,8 +125,8 @@ export default function CompanyDashboard() {
 
   const fetchCompanyData = async (companyId) => {
     try {
-      // Fetch documents, reviews, sections, requirements, statuses, progress, and audit progress in parallel
-      const [docsData, reviewsData, sectionsData, requirementsData, statusesData, progressData, auditProgressData] = await Promise.all([
+      // Fetch documents, reviews, sections, requirements, statuses, progress, audit progress, and audit statuses in parallel
+      const [docsData, reviewsData, sectionsData, requirementsData, statusesData, progressData, auditProgressData, auditStatusesData] = await Promise.all([
         getMyDocuments(companyId),
         getCompanyReviews(companyId).catch((err) => {
           console.warn("Failed to load reviews:", err)
@@ -150,12 +151,17 @@ export default function CompanyDashboard() {
         getAuditProgress(companyId).catch((err) => {
           console.error("Failed to load audit progress:", err)
           return 0
+        }),
+        getRequirementsWithAuditStatus(companyId).catch((err) => {
+          console.error("Failed to load audit statuses:", err)
+          return []
         })
       ])
 
       console.log("Fetched sections:", sectionsData)
       console.log("Fetched requirements:", requirementsData)
       console.log("Fetched requirement statuses:", statusesData)
+      console.log("Fetched audit statuses:", auditStatusesData)
 
       setDocuments(docsData)
       setReviews(reviewsData)
@@ -164,6 +170,7 @@ export default function CompanyDashboard() {
       setRequirementStatuses(statusesData)
       setStatusProgress(progressData)
       setAuditProgress(auditProgressData)
+      setAuditStatuses(auditStatusesData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -553,6 +560,8 @@ export default function CompanyDashboard() {
                   throw err
                 }
               }}
+              auditStatuses={auditStatuses || []}
+              onUpdateAuditStatus={null}
             />
           </div>
         ) : (

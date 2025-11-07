@@ -408,12 +408,12 @@ export default function RequirementsTabs({
     }))
   }
 
-  // Toggle audit status dropdown (for auditors)
+  // Toggle audit status dropdown (for auditors and company owners)
   const toggleAuditStatusDropdown = (requirementId) => {
-    if (!isAuditor || !onUpdateAuditStatus) return
+    if (!onUpdateAuditStatus) return
     setStatusDropdowns(prev => ({
       ...prev,
-      [requirementId]: !prev[requirementId]
+      [`audit-${requirementId}`]: !prev[`audit-${requirementId}`]
     }))
   }
 
@@ -431,14 +431,14 @@ export default function RequirementsTabs({
     }
   }
 
-  // Handle audit status update (for auditors)
+  // Handle audit status update (for auditors and company owners)
   const handleAuditStatusUpdate = async (requirementId, newStatus) => {
     if (!onUpdateAuditStatus) return
     try {
       await onUpdateAuditStatus(requirementId, newStatus)
       setStatusDropdowns(prev => ({
         ...prev,
-        [requirementId]: false
+        [`audit-${requirementId}`]: false
       }))
     } catch (error) {
       console.error("Failed to update audit status:", error)
@@ -1022,52 +1022,55 @@ export default function RequirementsTabs({
                                   )}
                                 </div>
                               )}
-                              {/* Audit Status Dropdown - Only for auditors */}
-                              {isAuditor && onUpdateAuditStatus && (
-                                <div className="relative status-dropdown-container" style={{ zIndex: statusDropdowns[requirement.id] ? 1000 : 'auto' }}>
-                                  <button
-                                    onClick={() => toggleAuditStatusDropdown(requirement.id)}
-                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border-2 transition-all duration-200 flex items-center gap-2 ${getStatusLabel(getAuditStatus(requirement.id)).color
-                                      } hover:shadow-md relative`}
-                                    style={{ zIndex: statusDropdowns[requirement.id] ? 1001 : 'auto' }}
-                                  >
-                                    <span>{getStatusLabel(getAuditStatus(requirement.id)).label}</span>
-                                    {statusDropdowns[requirement.id] ? (
-                                      <ChevronUp className="w-4 h-4" />
-                                    ) : (
-                                      <ChevronDown className="w-4 h-4" />
-                                    )}
-                                  </button>
-                                  {statusDropdowns[requirement.id] && (
-                                    <div className="absolute right-0 top-full mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden status-dropdown-container" style={{ zIndex: 1002 }}>
+                              {/* Audit Status - Read-only for company owners, editable for auditors */}
+                              {(!isAuditor && auditStatuses.length > 0) || (isAuditor && onUpdateAuditStatus) ? (
+                                <>
+                                  {!isAuditor ? (
+                                    // Read-only display for company owners
+                                    <div className={`px-3 py-1.5 rounded-lg text-sm font-medium border-2 flex items-center gap-2 ${getStatusLabel(getAuditStatus(requirement.id)).color}`} title="Auditor Status (Read-only)">
+                                      <span>Audit: {getStatusLabel(getAuditStatus(requirement.id)).label}</span>
+                                    </div>
+                                  ) : (
+                                    // Editable dropdown for auditors (Yes/No only, no TSE)
+                                    <div className="relative status-dropdown-container" style={{ zIndex: statusDropdowns[`audit-${requirement.id}`] ? 1000 : 'auto' }}>
                                       <button
-                                        onClick={() => handleAuditStatusUpdate(requirement.id, 0)}
-                                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${getAuditStatus(requirement.id) === 0 ? "bg-red-50 font-semibold" : ""
-                                          }`}
+                                        onClick={() => toggleAuditStatusDropdown(requirement.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border-2 transition-all duration-200 flex items-center gap-2 ${getStatusLabel(getAuditStatus(requirement.id)).color
+                                          } hover:shadow-md relative`}
+                                        style={{ zIndex: statusDropdowns[`audit-${requirement.id}`] ? 1001 : 'auto' }}
+                                        title="Auditor Status"
                                       >
-                                        <XCircle className={`w-4 h-4 ${getAuditStatus(requirement.id) === 0 ? "text-red-600" : "text-gray-400"}`} />
-                                        No
+                                        <span>{getStatusLabel(getAuditStatus(requirement.id)).label}</span>
+                                        {statusDropdowns[`audit-${requirement.id}`] ? (
+                                          <ChevronUp className="w-4 h-4" />
+                                        ) : (
+                                          <ChevronDown className="w-4 h-4" />
+                                        )}
                                       </button>
-                                      <button
-                                        onClick={() => handleAuditStatusUpdate(requirement.id, 1)}
-                                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${getAuditStatus(requirement.id) === 1 ? "bg-orange-50 font-semibold" : ""
-                                          }`}
-                                      >
-                                        <AlertCircle className={`w-4 h-4 ${getAuditStatus(requirement.id) === 1 ? "text-orange-600" : "text-gray-400"}`} />
-                                        TSE
-                                      </button>
-                                      <button
-                                        onClick={() => handleAuditStatusUpdate(requirement.id, 2)}
-                                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${getAuditStatus(requirement.id) === 2 ? "bg-green-50 font-semibold" : ""
-                                          }`}
-                                      >
-                                        <CheckCircle2 className={`w-4 h-4 ${getAuditStatus(requirement.id) === 2 ? "text-green-600" : "text-gray-400"}`} />
-                                        Yes
-                                      </button>
+                                      {statusDropdowns[`audit-${requirement.id}`] && (
+                                        <div className="absolute right-0 top-full mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden status-dropdown-container" style={{ zIndex: 1002 }}>
+                                          <button
+                                            onClick={() => handleAuditStatusUpdate(requirement.id, 0)}
+                                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${getAuditStatus(requirement.id) === 0 ? "bg-red-50 font-semibold" : ""
+                                              }`}
+                                          >
+                                            <XCircle className={`w-4 h-4 ${getAuditStatus(requirement.id) === 0 ? "text-red-600" : "text-gray-400"}`} />
+                                            No
+                                          </button>
+                                          <button
+                                            onClick={() => handleAuditStatusUpdate(requirement.id, 2)}
+                                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 transition-colors flex items-center gap-2 ${getAuditStatus(requirement.id) === 2 ? "bg-green-50 font-semibold" : ""
+                                              }`}
+                                          >
+                                            <CheckCircle2 className={`w-4 h-4 ${getAuditStatus(requirement.id) === 2 ? "text-green-600" : "text-gray-400"}`} />
+                                            Yes
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
-                                </div>
-                              )}
+                                </>
+                              ) : null}
                               {!isAuditor && onUpload && (
                                 <button
                                   onClick={() => {
